@@ -1,0 +1,39 @@
+{
+  "name": "@antiphon/hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "tauri:dev": "tauri dev",
+    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "tauri:build": "tauri build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@antiphon/api": "workspace:*",
+    "@antiphon/core": "workspace:*",
+    "@antiphon/motion": "workspace:*",
+    "@antiphon/ui": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
+    "framer-motion": "^11.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^22.13.4",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.4.1",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^2.1.8"
+  }
+}

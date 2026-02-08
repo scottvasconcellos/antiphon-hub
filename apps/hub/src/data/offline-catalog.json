@@ -1,0 +1,43 @@
+[
+  {
+    "id": "antiphon-dummy-product",
+    "name": "Antiphon Dummy Product",
+    "tagline": "Portable install pipeline validation",
+    "description": "A signed dummy product used to validate download, verify, install, update, and launch flow in development.",
+    "category": "utilities",
+    "iconPath": "/assets/logos/Logo - transparent background.png",
+    "platforms": [
+      {
+        "os": "mac",
+        "arch": "arm64",
+        "installerType": "zip",
+        "installStrategy": {
+          "kind": "portableZip",
+          "executableRelativePath": "Antiphon Dummy.app",
+          "destination": "apps-default"
+        }
+      },
+      {
+        "os": "win",
+        "arch": "x64",
+        "installerType": "zip",
+        "installStrategy": {
+          "kind": "portableZip",
+          "executableRelativePath": "AntiphonDummyPortable",
+          "destination": "apps-default"
+        }
+      }
+    ],
+    "currentVersion": "1.0.0",
+    "releaseChannel": "stable",
+    "purchase": {
+      "type": "serial",
+      "supportsOffline": true
+    },
+    "licensePolicy": {
+      "seats": 2,
+      "offlineGraceDays": 30,
+      "requiresAccount": false
+    }
+  }
+]

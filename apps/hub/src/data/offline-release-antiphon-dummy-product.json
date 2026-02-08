@@ -1,0 +1,37 @@
+{
+  "productId": "antiphon-dummy-product",
+  "version": "1.0.0",
+  "publishedAt": "2026-02-07T20:34:43.194Z",
+  "notes": "Initial dev release for zip install and verification smoke test.",
+  "artifacts": [
+    {
+      "os": "mac",
+      "arch": "arm64",
+      "installerType": "zip",
+      "installStrategy": {
+        "kind": "portableZip",
+        "executableRelativePath": "Antiphon Dummy.app",
+        "destination": "apps-default"
+      },
+      "url": "http://localhost:5174/artifacts/antiphon-dummy-mac.zip",
+      "sha256": "feb678ec3176349c739cfcc89c63e34306bbce8224a81dfc008259232782db7e",
+      "sizeBytes": 3040,
+      "signature": "LDqXLvt/eudXQ8qrVNnNmePpJreGzyySlaZ84Yg3Bm3XRazSlPD1GCNfCQnA3SW5c76W+vGvS33b+9CdkKT4AQ=="
+    },
+    {
+      "os": "win",
+      "arch": "x64",
+      "installerType": "zip",
+      "installStrategy": {
+        "kind": "portableZip",
+        "executableRelativePath": "AntiphonDummyPortable",
+        "destination": "apps-default"
+      },
+      "url": "http://localhost:5174/artifacts/antiphon-dummy-win.zip",
+      "sha256": "8277a54939f849238a2392134df02fde3a75dd6b90e2dd47e4bc712b2bd2c33d",
+      "sizeBytes": 681,
+      "signature": "0+E0FIMyLaAx23xk7iKyJ4aqOU4iLXe57kKHzVBfSb5nRStrw7DfHnnEEhYyCdAUX6dcQOlu/QC8mpNNGQUXAg=="
+    }
+  ],
+  "manifestSignature": "qaPJeikOgbEaMvzG4JC/1eGZQbwtE5j+2rXd8l4N6SB96hngu3nFiq6MeQG6OVGuM3J0XQy/bcRwys/+XoMvBw=="
+}

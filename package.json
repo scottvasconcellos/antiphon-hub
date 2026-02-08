@@ -1,0 +1,16 @@
+{
+  "name": "antiphon-app-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Antiphon Studios desktop Hub monorepo template",
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "dev": "pnpm --filter @antiphon/hub dev",
+    "dev:server": "pnpm --filter @antiphon/mock-server dev",
+    "build": "pnpm --filter @antiphon/hub build",
+    "build:all": "pnpm -r --filter './packages/**' --filter './apps/**' build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "smoke:e2e": "node scripts/smoke_install_dummy.mjs"
+  }
+}

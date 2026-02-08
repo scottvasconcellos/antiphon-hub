@@ -1,0 +1,38 @@
+[package]
+name = "antiphon_hub"
+version = "0.1.0"
+description = "Antiphon Studios Hub"
+authors = ["Antiphon Studios"]
+edition = "2021"
+
+[lib]
+name = "antiphon_hub_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+base64 = "0.22.1"
+chrono = { version = "0.4.39", features = ["serde"] }
+directories = "5.0.1"
+ed25519-dalek = "2.1.1"
+futures-util = "0.3.31"
+open = "5.3.2"
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+rusqlite = { version = "0.33.0", features = ["bundled"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+sha2 = "0.10.8"
+tauri = { version = "2.2.5", features = [] }
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread", "fs", "io-util"] }
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
+zip = "2.2.2"
+keyring = { version = "3.6.1", features = ["apple-native", "windows-native"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
