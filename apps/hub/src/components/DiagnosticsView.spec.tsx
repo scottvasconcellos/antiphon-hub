@@ -17,6 +17,10 @@ describe('DiagnosticsView actions', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Run Self-Test' })).toBeInTheDocument();
+    const exportButton = screen.getByTestId('diag-export-button');
+    const copyButton = screen.getByTestId('diag-copy-button');
+    expect(exportButton.tagName).toBe('BUTTON');
+    expect(copyButton.tagName).toBe('BUTTON');
     expect(screen.getByRole('button', { name: 'Export Self-Test Report (JSON)' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Copy Report' })).toBeDisabled();
     expect(screen.getByText('Run self-test to generate report.')).toBeInTheDocument();

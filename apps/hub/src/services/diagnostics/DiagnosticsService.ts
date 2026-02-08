@@ -575,19 +575,94 @@ export const describeOverflowCulprits = (
   return culprits.slice(0, limit);
 };
 
+type ProbeState = 'OK' | 'INCOMPLETE' | 'FAILED';
+type ProbeFontsStatus = 'loaded' | 'loading' | 'unsupported' | 'timeout' | 'failed';
+
 interface ResponsiveProbeResult {
   width: number;
-  hasOverflow: boolean;
+  probeState: ProbeState;
+  reason?: string;
+  shellConfirmed: boolean;
+  styleConfirmed: boolean;
+  fontsStatus: ProbeFontsStatus;
   scrollWidth: number;
   clientWidth: number;
+  overflowDelta: number;
   culprits: OverflowCulprit[];
 }
 
-const cloneRuntimeStyles = (targetHead: HTMLElement) => {
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<{ status: 'ok'; value: T } | { status: 'timeout' } | { status: 'error'; error: unknown }> => {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<{ status: 'timeout' }>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve({ status: 'timeout' }), timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([
+      promise.then((value) => ({ status: 'ok', value }) as const).catch((error) => ({ status: 'error', error }) as const),
+      timeoutPromise,
+    ]);
+    return result;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+};
+
+const cloneRuntimeStyles = (targetHead: HTMLElement): number => {
   const styleNodes = document.querySelectorAll('style,link[rel="stylesheet"]');
   styleNodes.forEach((node) => {
     targetHead.appendChild(node.cloneNode(true));
   });
+  return styleNodes.length;
+};
+
+const waitForFontsStatus = async (doc: Document, timeoutMs: number): Promise<ProbeFontsStatus> => {
+  if (!('fonts' in doc) || !doc.fonts) {
+    return 'unsupported';
+  }
+
+  if (doc.fonts.status === 'loaded') {
+    return 'loaded';
+  }
+
+  const ready = await withTimeout(doc.fonts.ready, timeoutMs);
+  if (ready.status === 'timeout') {
+    return 'timeout';
+  }
+  if (ready.status === 'error') {
+    return 'failed';
+  }
+
+  const postStatus = String(doc.fonts.status);
+  return postStatus === 'loaded' ? 'loaded' : 'loading';
+};
+
+const summarizeProbe = (probe: ResponsiveProbeResult): string => {
+  return `${probe.width}: ${probe.probeState} scroll=${probe.scrollWidth} client=${probe.clientWidth} delta=${probe.overflowDelta} shell=${probe.shellConfirmed} styles=${probe.styleConfirmed} fonts=${probe.fontsStatus}${probe.reason ? ` (${probe.reason})` : ''}`;
+};
+
+const toComparableSnapshot = (probes: ResponsiveProbeResult[]): string => {
+  return probes
+    .map((probe) =>
+      [
+        probe.width,
+        probe.probeState,
+        probe.scrollWidth,
+        probe.clientWidth,
+        probe.overflowDelta,
+        probe.shellConfirmed,
+        probe.styleConfirmed,
+        probe.fontsStatus,
+      ].join(':')
+    )
+    .join('|');
 };
 
 const runResponsiveProbe = async (readyRoot: HTMLElement, width: number): Promise<ResponsiveProbeResult> => {
@@ -602,58 +677,150 @@ const runResponsiveProbe = async (readyRoot: HTMLElement, width: number): Promis
   iframe.style.visibility = 'hidden';
   document.body.appendChild(iframe);
 
-  const frameDoc = iframe.contentDocument;
-  if (!frameDoc) {
-    iframe.remove();
+  try {
+    const frameDoc = iframe.contentDocument;
+    if (!frameDoc) {
+      return {
+        width,
+        probeState: 'FAILED',
+        reason: 'iframe document unavailable',
+        shellConfirmed: false,
+        styleConfirmed: false,
+        fontsStatus: 'failed',
+        scrollWidth: 0,
+        clientWidth: 0,
+        overflowDelta: 0,
+        culprits: [],
+      };
+    }
+
+    frameDoc.open();
+    frameDoc.write('<!doctype html><html><head></head><body></body></html>');
+    frameDoc.close();
+
+    frameDoc.body.style.margin = '0';
+    frameDoc.body.style.padding = '0';
+    frameDoc.documentElement.style.margin = '0';
+    frameDoc.documentElement.style.padding = '0';
+
+    const styleCount = cloneRuntimeStyles(frameDoc.head);
+    const initialRenderWait = await withTimeout(
+      (async () => {
+        await nextTick();
+        await wait(40);
+      })(),
+      900
+    );
+
+    const clone = readyRoot.cloneNode(true) as HTMLElement;
+    clone.style.width = '100%';
+    clone.style.minWidth = '0';
+    frameDoc.body.appendChild(clone);
+
+    const secondRenderWait = await withTimeout(
+      (async () => {
+        await nextTick();
+        await wait(40);
+      })(),
+      900
+    );
+
+    const shellElement = frameDoc.querySelector('[data-testid="hub-ready-root"]') as HTMLElement | null;
+    const routeElement = frameDoc.querySelector('[data-testid^="route-"]') as HTMLElement | null;
+    const shellConfirmed = Boolean(shellElement || routeElement);
+
+    const shellStyle = shellElement && iframe.contentWindow ? iframe.contentWindow.getComputedStyle(shellElement) : null;
+    const headerElement = frameDoc.querySelector('.hub-header') as HTMLElement | null;
+    const headerStyle = headerElement && iframe.contentWindow ? iframe.contentWindow.getComputedStyle(headerElement) : null;
+    const shellDisplay = shellStyle?.display ?? '';
+    const headerBackground = headerStyle?.backgroundColor ?? '';
+    const styleConfirmed =
+      styleCount > 0 && (shellDisplay === 'grid' || /rgb\(\s*17\s*,\s*17\s*,\s*17\s*\)/.test(headerBackground));
+
+    const fontsStatus = await waitForFontsStatus(frameDoc, 1_200);
+
+    const clientWidth = frameDoc.documentElement.clientWidth;
+    const scrollWidth = frameDoc.documentElement.scrollWidth;
+    const overflowDelta = Math.max(0, scrollWidth - clientWidth);
+    const culprits =
+      overflowDelta > 1
+        ? describeOverflowCulprits(clone, {
+            viewportWidth: clientWidth,
+            scopeWindow: iframe.contentWindow ?? window,
+            limit: 10,
+          })
+        : [];
+
+    const reasons: string[] = [];
+    if (!shellConfirmed) {
+      reasons.push('app shell not rendered');
+    }
+    if (!styleConfirmed) {
+      reasons.push('styles not loaded');
+    }
+    if (fontsStatus === 'timeout' || fontsStatus === 'failed' || fontsStatus === 'loading') {
+      reasons.push('fonts not loaded');
+    }
+    if (initialRenderWait.status === 'timeout' || secondRenderWait.status === 'timeout') {
+      reasons.push('probe timed out');
+    }
+    if (initialRenderWait.status === 'error' || secondRenderWait.status === 'error') {
+      return {
+        width,
+        probeState: 'FAILED',
+        reason: 'probe render failed',
+        shellConfirmed,
+        styleConfirmed,
+        fontsStatus,
+        scrollWidth,
+        clientWidth,
+        overflowDelta,
+        culprits,
+      };
+    }
+
+    if (reasons.length > 0) {
+      return {
+        width,
+        probeState: 'INCOMPLETE',
+        reason: reasons.join('; '),
+        shellConfirmed,
+        styleConfirmed,
+        fontsStatus,
+        scrollWidth,
+        clientWidth,
+        overflowDelta,
+        culprits,
+      };
+    }
+
     return {
       width,
-      hasOverflow: false,
-      scrollWidth: width,
-      clientWidth: width,
+      probeState: 'OK',
+      shellConfirmed,
+      styleConfirmed,
+      fontsStatus,
+      scrollWidth,
+      clientWidth,
+      overflowDelta,
+      culprits,
+    };
+  } catch (error) {
+    return {
+      width,
+      probeState: 'FAILED',
+      reason: error instanceof Error ? error.message : String(error),
+      shellConfirmed: false,
+      styleConfirmed: false,
+      fontsStatus: 'failed',
+      scrollWidth: 0,
+      clientWidth: 0,
+      overflowDelta: 0,
       culprits: [],
     };
+  } finally {
+    iframe.remove();
   }
-
-  frameDoc.open();
-  frameDoc.write('<!doctype html><html><head></head><body></body></html>');
-  frameDoc.close();
-
-  frameDoc.body.style.margin = '0';
-  frameDoc.body.style.padding = '0';
-  frameDoc.documentElement.style.margin = '0';
-  frameDoc.documentElement.style.padding = '0';
-
-  cloneRuntimeStyles(frameDoc.head);
-  await nextTick();
-  await new Promise<void>((resolve) => setTimeout(resolve, 24));
-
-  const clone = readyRoot.cloneNode(true) as HTMLElement;
-  clone.style.width = '100%';
-  clone.style.minWidth = '0';
-  frameDoc.body.appendChild(clone);
-
-  await nextTick();
-  await new Promise<void>((resolve) => setTimeout(resolve, 24));
-
-  const clientWidth = frameDoc.documentElement.clientWidth;
-  const scrollWidth = frameDoc.documentElement.scrollWidth;
-  const hasOverflow = scrollWidth > clientWidth + 1;
-  const culprits = hasOverflow
-    ? describeOverflowCulprits(clone, {
-        viewportWidth: clientWidth,
-        scopeWindow: iframe.contentWindow ?? window,
-        limit: 10,
-      })
-    : [];
-
-  iframe.remove();
-  return {
-    width,
-    hasOverflow,
-    scrollWidth,
-    clientWidth,
-    culprits,
-  };
 };
 
 const checkP41ResponsiveOverflow = async (): Promise<CheckResult> => {
@@ -673,47 +840,67 @@ const checkP41ResponsiveOverflow = async (): Promise<CheckResult> => {
   }
 
   const widths = [1280, 1024, 768, 480];
-  const failed: string[] = [];
-
-  for (const width of widths) {
-    const probe = await runResponsiveProbe(readyRoot as HTMLElement, width);
-    if (!probe.hasOverflow) {
-      continue;
+  const runOnce = async () => {
+    const probes: ResponsiveProbeResult[] = [];
+    for (const width of widths) {
+      probes.push(await runResponsiveProbe(readyRoot as HTMLElement, width));
     }
+    return probes;
+  };
 
-    const diagnosticsRows =
-      probe.culprits.length > 0
-        ? probe.culprits
-        : [
-            {
-              selectorPath: '[data-testid="hub-ready-root"]',
-              dataTestId: 'hub-ready-root',
-              role: 'none',
-              tagName: 'div',
-              rectWidth: probe.scrollWidth,
-              rectRight: probe.scrollWidth,
-              scrollWidth: probe.scrollWidth,
-              clientWidth: probe.clientWidth,
-              computedMinWidth: 'unknown',
-              whiteSpace: 'unknown',
-              overflowX: 'unknown',
-              severity: Number((probe.scrollWidth - probe.clientWidth).toFixed(2)),
-            },
-          ];
-    failed.push(`${probe.width}: ${JSON.stringify(diagnosticsRows, null, 0)}`);
+  const firstRun = await runOnce();
+  const secondRun = await runOnce();
+
+  const firstSnapshot = toComparableSnapshot(firstRun);
+  const secondSnapshot = toComparableSnapshot(secondRun);
+  if (firstSnapshot !== secondSnapshot) {
+    return {
+      status: 'FAIL',
+      details: `P4.1 non-deterministic results. Run A: ${firstRun.map(summarizeProbe).join(' | ')} || Run B: ${secondRun
+        .map(summarizeProbe)
+        .join(' | ')}`,
+      remediationHint: 'Stabilize responsive probe prerequisites and rendering timing before trusting PASS results.',
+    };
   }
 
-  if (failed.length === 0) {
+  const failed = firstRun.filter((probe) => probe.probeState === 'FAILED');
+  if (failed.length > 0) {
+    return {
+      status: 'FAIL',
+      details: failed.map(summarizeProbe).join(' | '),
+      remediationHint: 'Responsive probe crashed. Fix iframe/render handling before evaluating overflow.',
+    };
+  }
+
+  const incomplete = firstRun.filter((probe) => probe.probeState === 'INCOMPLETE');
+  if (incomplete.length > 0) {
+    return {
+      status: 'SKIPPED',
+      details: `P4.1 skipped: ${incomplete.map(summarizeProbe).join(' | ')}`,
+      remediationHint: 'P4.1 requires app shell + styles + timed probe readiness. Re-run when prerequisites are satisfied.',
+    };
+  }
+
+  const overflowing = firstRun.filter((probe) => probe.overflowDelta > 1);
+  if (overflowing.length === 0) {
     return {
       status: 'PASS',
-      details: 'No horizontal overflow detected in iframe viewport probes: 1280/1024/768/480.',
+      details: firstRun.map(summarizeProbe).join(' | '),
     };
   }
 
   return {
     status: 'FAIL',
-    details: `Horizontal overflow detected: ${failed.join(' | ')}`,
-    remediationHint: 'Audit sidebar/toolbar min-width, long text wrapping, and fixed-width controls at failing breakpoints.',
+    details: `${firstRun.map(summarizeProbe).join(' | ')} || offenders=${JSON.stringify(
+      overflowing.map((probe) => ({
+        width: probe.width,
+        delta: probe.overflowDelta,
+        culprits: probe.culprits,
+      })),
+      null,
+      0
+    )}`,
+    remediationHint: 'Audit header/sidebar/diagnostics width constraints at failing breakpoints and use culprit metadata.',
   };
 };
 

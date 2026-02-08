@@ -120,6 +120,7 @@ export const DiagnosticsView = ({
           Run Self-Test
         </Button>
         <Button
+          data-testid="diag-export-button"
           variant="secondary"
           disabled={!report}
           aria-disabled={!report}
@@ -135,6 +136,7 @@ export const DiagnosticsView = ({
           Export Self-Test Report (JSON)
         </Button>
         <Button
+          data-testid="diag-copy-button"
           variant="secondary"
           disabled={!report}
           aria-disabled={!report}
